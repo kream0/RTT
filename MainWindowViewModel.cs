@@ -469,13 +469,13 @@ namespace RepoToTxtGui
             StatusText = $"Updating selection for {changedFilter.DisplayName}...";
             try
             {
-                List<TreeNodeViewModel> nodesToProcess = new List<TreeNodeViewModel>();
-
-                // Use InvokeAsync to avoid blocking the UI thread
+                var nodesToProcess = new List<TreeNodeViewModel>();
                 await Application.Current.Dispatcher.InvokeAsync(() =>
                 {
                     foreach (var rootNode in RootNodes) nodesToProcess.Add(rootNode);
                 }, System.Windows.Threading.DispatcherPriority.Background);
+
+                var parentsOfChangedNodes = new HashSet<TreeNodeViewModel>();
 
                 await Task.Run(async () =>
                 {
@@ -483,16 +483,10 @@ namespace RepoToTxtGui
                     while (stack.Count > 0)
                     {
                         var node = stack.Pop();
+                        // Immutable properties can be read directly from background thread
+                        // Name, IsDirectory, Parent are set at construction and don't change.
                         string nodeName = node.Name;
-                        bool nodeIsDirectory = false;
-                        ObservableCollection<TreeNodeViewModel> nodeChildren = null;
-
-                        // Access node properties on a single dispatcher call to reduce UI thread contention
-                        await Application.Current.Dispatcher.InvokeAsync(() =>
-                        {
-                            nodeIsDirectory = node.IsDirectory;
-                            nodeChildren = node.Children;
-                        }, System.Windows.Threading.DispatcherPriority.Background);
+                        bool nodeIsDirectory = node.IsDirectory;
 
                         if (!nodeIsDirectory)
                         {
@@ -502,59 +496,76 @@ namespace RepoToTxtGui
 
                             if (shouldUpdate)
                             {
-                                // Use BeginInvoke to avoid waiting for UI thread
-                                Application.Current.Dispatcher.BeginInvoke(() =>
+                                await Application.Current.Dispatcher.InvokeAsync(() =>
                                 {
-                                    node.SetIsChecked(changedFilter.IsSelected, false, true);
+                                    // Check current state on UI thread before attempting to set, to avoid unnecessary work
+                                    if (node.IsChecked != changedFilter.IsSelected)
+                                    {
+                                        node.SetIsChecked(changedFilter.IsSelected, false, false); // updateParent: false
+                                        if (node.Parent != null)
+                                        {
+                                            parentsOfChangedNodes.Add(node.Parent);
+                                        }
+                                    }
                                 }, System.Windows.Threading.DispatcherPriority.Background);
                             }
                         }
-                        else if (nodeChildren != null)
+                        else // Is a directory
                         {
-                            var childrenToPush = new List<TreeNodeViewModel>();
-
-                            // Access child nodes on UI thread
+                            List<TreeNodeViewModel> childrenSnapshot = null;
                             await Application.Current.Dispatcher.InvokeAsync(() =>
                             {
-                                childrenToPush.AddRange(nodeChildren.Reverse());
+                                childrenSnapshot = new List<TreeNodeViewModel>(node.Children.Reverse());
                             }, System.Windows.Threading.DispatcherPriority.Background);
 
-                            foreach (var child in childrenToPush)
-                                stack.Push(child);
+                            if (childrenSnapshot != null)
+                            {
+                                foreach (var child in childrenSnapshot)
+                                    stack.Push(child);
+                            }
                         }
                     }
                 });
 
-                // Update UI on background priority
-                Application.Current.Dispatcher.BeginInvoke(() =>
+                // After all individual nodes are updated (without parent propagation),
+                // update the unique parents on the UI thread.
+                if (parentsOfChangedNodes.Any())
+                {
+                    await Application.Current.Dispatcher.InvokeAsync(() =>
+                    {
+                        foreach (var parentNode in parentsOfChangedNodes)
+                        {
+                            parentNode.UpdateCheckStateBasedOnChildren();
+                        }
+                    }, System.Windows.Threading.DispatcherPriority.Background);
+                }
+
+                await Application.Current.Dispatcher.BeginInvoke(() => // Use BeginInvoke for lower priority UI update
                 {
                     StatusText = "Selection updated.";
                 }, System.Windows.Threading.DispatcherPriority.Background);
             }
             catch (Exception ex)
             {
-                Application.Current.Dispatcher.BeginInvoke(() =>
+                await Application.Current.Dispatcher.BeginInvoke(() =>
                 {
                     StatusText = $"Error updating for {changedFilter.DisplayName}: {ex.Message}";
                 }, System.Windows.Threading.DispatcherPriority.Background);
             }
             finally
             {
-                // Make sure to reset IsBusy on the UI thread
-                Application.Current.Dispatcher.BeginInvoke(() =>
+                await Application.Current.Dispatcher.InvokeAsync(async () => // Ensure IsBusy is set on UI thread and then regenerate
                 {
                     IsBusy = false;
-                }, System.Windows.Threading.DispatcherPriority.Background);
-
-                // Regenerate output after we've updated the file selections
-                await RegenerateOutputAsync();
+                    await RegenerateOutputAsync(); // Regenerate output after we've updated the file selections
+                });
             }
         }
 
         // Output generation
         public async Task RegenerateOutputAsync()
         {
-            if (IsBusy && StatusText != "Loading folder structure...") return;
+            if (IsBusy && StatusText != "Loading folder structure...") return; // Allow if initial load
             IsBusy = true;
             StatusText = "Generating output...";
 
@@ -567,46 +578,50 @@ namespace RepoToTxtGui
                     var filesToProcessMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
                     var treeTraversalStack = new Stack<TreeNodeViewModel>();
 
-                    // Safely gather nodes from UI thread
                     await Application.Current.Dispatcher.InvokeAsync(() =>
                     {
-                        foreach (var rootNode in RootNodes.Reverse())
+                        foreach (var rootNode in RootNodes.Reverse()) // Use RootNodes directly
                             treeTraversalStack.Push(rootNode);
                     }, System.Windows.Threading.DispatcherPriority.Background);
 
                     while (treeTraversalStack.Count > 0)
                     {
                         var node = treeTraversalStack.Pop();
-                        bool? nodeIsChecked = false;
-                        bool nodeIsDirectory = false;
-                        string nodeFullPath = string.Empty;
-                        List<TreeNodeViewModel> childrenSnapshot = new List<TreeNodeViewModel>();
 
-                        // Use InvokeAsync with Background priority to prevent UI freezing
+                        // Immutable properties (Name, FullPath, IsDirectory) are read directly from the background thread.
+                        // This assumes they are set at construction and not modified afterwards, which is true for TreeNodeViewModel.
+                        bool nodeIsDirectory_directRead = node.IsDirectory;
+                        string nodeFullPath_directRead = node.FullPath;
+
+                        bool? nodeIsChecked = null; // Initialize to prevent CS0165
+                        List<TreeNodeViewModel> childrenSnapshot = null;
+
+                        // Dispatch to UI thread only for IsChecked (mutable) and Children collection (UI-owned)
                         await Application.Current.Dispatcher.InvokeAsync(() =>
                         {
                             nodeIsChecked = node.IsChecked;
-                            nodeIsDirectory = node.IsDirectory;
-                            nodeFullPath = node.FullPath;
-                            if (node.IsDirectory) childrenSnapshot.AddRange(node.Children.Reverse());
+                            if (nodeIsDirectory_directRead) // Use the directly read IsDirectory
+                            {
+                                childrenSnapshot = new List<TreeNodeViewModel>(node.Children.Reverse());
+                            }
                         }, System.Windows.Threading.DispatcherPriority.Background);
 
                         if (nodeIsChecked == true)
                         {
-                            if (!nodeIsDirectory)
+                            if (!nodeIsDirectory_directRead)
                             {
-                                string relativePath = Path.GetRelativePath(_selectedFolderPath, nodeFullPath).Replace(Path.DirectorySeparatorChar, '/');
+                                string relativePath = Path.GetRelativePath(_selectedFolderPath, nodeFullPath_directRead).Replace(Path.DirectorySeparatorChar, '/');
                                 if (!filesToProcessMap.ContainsKey(relativePath))
                                 {
-                                    filesToProcessMap.Add(relativePath, nodeFullPath);
+                                    filesToProcessMap.Add(relativePath, nodeFullPath_directRead);
                                 }
                             }
-                            else
+                            else if (childrenSnapshot != null) // It's a checked directory
                             {
                                 foreach (var child in childrenSnapshot) treeTraversalStack.Push(child);
                             }
                         }
-                        else if (nodeIsChecked == null && nodeIsDirectory)
+                        else if (nodeIsChecked == null && nodeIsDirectory_directRead && childrenSnapshot != null) // Indeterminate directory
                         {
                             foreach (var child in childrenSnapshot) treeTraversalStack.Push(child);
                         }
@@ -617,10 +632,11 @@ namespace RepoToTxtGui
 
                     var outputBuilder = new StringBuilder();
 
-                    string localUserPrePrompt = string.Empty;
+                    string localUserPrePrompt = string.Empty; // Read UserPrePrompt via Dispatcher as it's a UI-bound property
                     await Application.Current.Dispatcher.InvokeAsync(() =>
                         localUserPrePrompt = UserPrePrompt,
                         System.Windows.Threading.DispatcherPriority.Background);
+
 
                     if (!string.IsNullOrWhiteSpace(localUserPrePrompt))
                     {
@@ -645,9 +661,8 @@ namespace RepoToTxtGui
                         var fileContents = new ConcurrentDictionary<string, string>();
                         var fileReadErrors = new ConcurrentDictionary<string, string>();
 
-                        // Use throttling to avoid too many parallel file reads which might overwhelm the system
                         var throttledTasks = new List<Task>();
-                        var throttleSemaphore = new SemaphoreSlim(Math.Min(Environment.ProcessorCount * 2, 16)); // Limit concurrent reads
+                        var throttleSemaphore = new SemaphoreSlim(Math.Min(Environment.ProcessorCount * 2, 16));
 
                         foreach (var relativePath in sortedRelativePaths)
                         {
@@ -697,15 +712,14 @@ namespace RepoToTxtGui
                         }
                     }
 
-                    // Use BeginInvoke with Background priority to update UI without blocking
-                    Application.Current.Dispatcher.BeginInvoke(() =>
+                    await Application.Current.Dispatcher.BeginInvoke(() => // Use BeginInvoke for lower priority UI update
                         OutputText = outputBuilder.ToString(),
                         System.Windows.Threading.DispatcherPriority.Background);
                 });
             }
             catch (Exception ex)
             {
-                Application.Current.Dispatcher.BeginInvoke(() =>
+                await Application.Current.Dispatcher.BeginInvoke(() =>
                 {
                     OutputText = $"Error generating output: {ex.Message}";
                     StatusText = $"Error: {ex.Message}";
@@ -713,8 +727,7 @@ namespace RepoToTxtGui
             }
             finally
             {
-                // Update UI state
-                Application.Current.Dispatcher.BeginInvoke(() =>
+                await Application.Current.Dispatcher.BeginInvoke(() =>
                 {
                     StatusText = "Ready";
                     IsBusy = false;

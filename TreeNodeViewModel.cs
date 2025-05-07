@@ -60,7 +60,7 @@ namespace RepoToTxtGui
         }
 
         // Called by children when their state changes
-        private void UpdateCheckStateBasedOnChildren()
+        public void UpdateCheckStateBasedOnChildren()
         {
             if (_isUpdatingCheckState) return;
             _isUpdatingCheckState = true;
