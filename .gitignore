@@ -62,3 +62,7 @@ bld/
 [Oo]bj/
 [Ll]og/
 [Ll]ogs/
+
+# Project specific
+*.zip
+TODO.md
