@@ -79,14 +79,14 @@
 
         <!-- File Type Filters Panel -->
         <DockPanel DockPanel.Dock="Top"
-                Margin="0,5,0,10"
+                   Margin="0,5,0,10"
                    Visibility="{Binding FileTypeFilters.Count, Converter={StaticResource InverseZeroToCollapsedConverter}, FallbackValue=Collapsed, ConverterParameter=InverseZeroToCollapsed}">
             <TextBlock Text="Filter by File Type (Checked types are included):"
-                    VerticalAlignment="Center"
-                    Margin="0,0,10,0"
-                    DockPanel.Dock="Left"/>
+                       VerticalAlignment="Center"
+                       Margin="0,0,10,0"
+                       DockPanel.Dock="Left"/>
             <ScrollViewer HorizontalScrollBarVisibility="Auto"
-                    VerticalScrollBarVisibility="Disabled">
+                          VerticalScrollBarVisibility="Disabled">
                 <ItemsControl ItemsSource="{Binding FileTypeFilters}">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
@@ -107,10 +107,10 @@
 
         <!-- User Pre-Prompt Section -->
         <DockPanel DockPanel.Dock="Top"
-                Margin="0,0,0,10">
+                   Margin="0,0,0,10">
             <TextBlock Text="Custom Pre-Prompt (optional):"
-                    DockPanel.Dock="Top"
-                    Margin="0,0,0,5"/>
+                       DockPanel.Dock="Top"
+                       Margin="0,0,0,5"/>
             <TextBox Text="{Binding UserPrePrompt, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                      AcceptsReturn="True"
                      TextWrapping="Wrap"
@@ -121,6 +121,24 @@
                      BorderThickness="1"
                      Padding="3"
                      IsEnabled="{Binding IsUiEnabled}"/>
+        </DockPanel>
+
+        <!-- LLM Model Selection and Token Count -->
+        <DockPanel DockPanel.Dock="Top"
+                Margin="0,0,0,10">
+            <TextBlock Text="LLM Model:"
+                    VerticalAlignment="Center"
+                    Margin="0,0,5,0"/>
+            <ComboBox ItemsSource="{Binding AvailableLlmModels}"
+                      SelectedItem="{Binding SelectedLlmModel, Mode=TwoWay}"
+                      MinWidth="150"
+                      VerticalAlignment="Center"
+                      Margin="0,0,10,0"
+                      IsEnabled="{Binding IsUiEnabled}"/>
+            <TextBlock Text="{Binding TokenCountDisplay, Mode=OneWay}"
+                       VerticalAlignment="Center"
+                       Margin="5,0,0,0"
+                       ToolTip="Token count based on selected model. 'proxy' indicates an estimation using a common tokenizer."/>
         </DockPanel>
 
         <!-- Main Content Area -->
@@ -142,7 +160,7 @@
                     Grid.Column="0"
                     Grid.Row="0">
                 <ScrollViewer VerticalScrollBarVisibility="Auto"
-                        HorizontalScrollBarVisibility="Auto">
+                              HorizontalScrollBarVisibility="Auto">
                     <TreeView ItemsSource="{Binding RootNodes}"
                               VirtualizingPanel.IsVirtualizing="True"
                               VirtualizingPanel.VirtualizationMode="Recycling">
@@ -171,8 +189,8 @@
 
             <!-- Right Column: Output Preview -->
             <Grid Grid.Column="1"
-                    Grid.Row="0"
-                    Margin="10,0,0,0">
+                  Grid.Row="0"
+                  Margin="10,0,0,0">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
@@ -198,8 +216,8 @@
 
             <!-- Busy Overlay -->
             <Grid Grid.Row="0"
-                    Grid.Column="0"
-                    Grid.ColumnSpan="2"
+                  Grid.Column="0"
+                  Grid.ColumnSpan="2"
                   Background="#AAFFFFFF"
                   Visibility="{Binding IsBusy, Converter={StaticResource BooleanToVisibilityConverter}}">
                 <TextBlock Text="Processing..."
@@ -211,16 +229,16 @@
 
             <!-- Status Bar -->
             <StatusBar Grid.Row="1"
-                    Grid.Column="0"
-                    Grid.ColumnSpan="2"
-                    VerticalAlignment="Bottom"
-                    Height="22">
+                       Grid.Column="0"
+                       Grid.ColumnSpan="2"
+                       VerticalAlignment="Bottom"
+                       Height="22">
                 <TextBlock Text="{Binding StatusText, Mode=OneWay, TargetNullValue=Ready}"/>
                 <ProgressBar Width="100"
-                        Height="15"
+                             Height="15"
                              Visibility="{Binding IsBusy, Converter={StaticResource BooleanToVisibilityConverter}}"
                              Margin="10,0"
-                        IsIndeterminate="True"/>
+                             IsIndeterminate="True"/>
             </StatusBar>
         </Grid>
     </DockPanel>

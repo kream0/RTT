@@ -8,4 +8,8 @@
     <UseWPF>true</UseWPF>
   </PropertyGroup>
 
+  <ItemGroup>
+    <PackageReference Include="SharpToken" Version="1.2.17" />
+  </ItemGroup>
+
 </Project>
