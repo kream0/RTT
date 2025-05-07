@@ -1,0 +1,65 @@
+# .NET build artifacts
+bin/
+obj/
+.vs/
+*.user
+*.suo
+*.dll
+*.exe
+*.pdb
+*.cache
+
+# Visual Studio files
+.vscode/
+*.vspscc
+*.vssscc
+*_i.c
+*_p.c
+*.ncb
+*.sbr
+*.tlb
+*.tlh
+*.bak
+*.log
+*.vsix
+*.[Pp]ublish.xml
+.builds
+Ankh.NoLoad
+UpgradeLog*.XML
+UpgradeLog*.htm
+
+# ReSharper
+_ReSharper*/
+*.[Rr]e[Ss]harper
+*.DotSettings.user
+
+# NuGet
+packages/
+*.nupkg
+# The packages folder can be ignored because of Package Restore
+**/packages/*
+# except build/, which is used as an MSBuild target.
+!**/packages/build/
+
+# User-specific files
+*.rsuser
+*.userosscache
+*.sln.docstates
+*.userprefs
+
+# Build results
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+[Ww][Ii][Nn]32/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+
