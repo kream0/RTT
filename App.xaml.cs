@@ -12,9 +12,18 @@ public partial class App : System.Windows.Application
 {
     protected override void OnStartup(StartupEventArgs e)
     {
-        base.OnStartup(e);
-        MainWindow mainWindow = new MainWindow();
-        mainWindow.Show();
+        try
+        {
+            base.OnStartup(e);
+            MainWindow mainWindow = new MainWindow();
+            mainWindow.Show();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Error during application startup: {ex.Message}\n\nStack trace: {ex.StackTrace}",
+                "Application Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            Shutdown(1);
+        }
     }
 }
 

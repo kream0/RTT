@@ -24,6 +24,10 @@ namespace RepoToTxtGui
         private CancellationTokenSource? _debounceTokenSource;
         private readonly int _debounceDelay = 500; // 500ms delay
 
+        // Token Counting Service
+        private readonly TokenCounterService? _tokenCounterService;
+        private bool _tokenCounterAvailable = false;
+
         protected virtual void OnPropertyChanged([CallerMemberName] string? propertyName = null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
@@ -41,6 +45,10 @@ namespace RepoToTxtGui
         private bool _useWebPreset = true;
         private string _userPrePrompt = string.Empty;
         private readonly HashSet<string> _detectedFileExtensions = new(StringComparer.OrdinalIgnoreCase);
+
+        // LLM Token Counting related fields
+        private LlmModel _selectedLlmModel = LlmModel.Gpt4o; // Default model
+        private string _tokenCountDisplay = "Tokens: (not available)";
 
         // Properties for data binding
         public ObservableCollection<TreeNodeViewModel> RootNodes
@@ -97,7 +105,112 @@ namespace RepoToTxtGui
         public string OutputText
         {
             get => _outputText;
-            set { _outputText = value; OnPropertyChanged(); }
+            set
+            {
+                if (_outputText != value)
+                {
+                    _outputText = value;
+                    OnPropertyChanged();
+                    // Update token count whenever OutputText changes
+                    if (_tokenCounterAvailable)
+                    {
+                        Console.WriteLine($"DEBUG: Setting OutputText with {(string.IsNullOrEmpty(value) ? "EMPTY" : $"{value.Length} chars")} content. About to update token count.");
+                        UpdateTokenCount();
+                    }
+                }
+            }
+        }
+
+        // Token counting helper method
+        private void UpdateTokenCount()
+        {
+            // Don't recalculate if the application is busy with other operations
+            if (IsBusy || !_tokenCounterAvailable) return;
+
+            // Start token counting operation asynchronously
+            _ = UpdateTokenCountAsync(_outputText);
+        }
+
+        // LLM Model Selection Properties
+        public LlmModel SelectedLlmModel
+        {
+            get => _selectedLlmModel;
+            set
+            {
+                if (_selectedLlmModel != value)
+                {
+                    _selectedLlmModel = value;
+                    OnPropertyChanged();
+                    // Recalculate tokens for the current OutputText with the new model
+                    if (_tokenCounterAvailable)
+                    {
+                        UpdateTokenCount();
+                    }
+                }
+            }
+        }
+
+        public LlmModel[] AvailableLlmModels => (LlmModel[])Enum.GetValues(typeof(LlmModel));
+
+        public string TokenCountDisplay
+        {
+            get => _tokenCountDisplay;
+            private set // Private setter as it's updated internally
+            {
+                if (_tokenCountDisplay != value)
+                {
+                    _tokenCountDisplay = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private async Task UpdateTokenCountAsync(string textToCount)
+        {
+            if (!_tokenCounterAvailable)
+            {
+                TokenCountDisplay = "Tokens: (not available)";
+                return;
+            }
+
+            // Preserve the current display if it's already calculating, to avoid flicker
+            string calculatingMsg = "Tokens: Calculating...";
+            bool alreadyCalculating = TokenCountDisplay == calculatingMsg;
+            if (!alreadyCalculating)
+            {
+                TokenCountDisplay = calculatingMsg;
+            }
+
+            LlmModel currentModel = _selectedLlmModel; // Capture current selection
+            Console.WriteLine($"DEBUG: UpdateTokenCountAsync called with model: {currentModel}, text length: {(string.IsNullOrEmpty(textToCount) ? 0 : textToCount.Length)}");
+
+            await Task.Run(() => // Perform calculation on a background thread
+            {
+                try
+                {
+                    var (count, encodingName, isProxy) = _tokenCounterService.CountTokens(textToCount, currentModel);
+                    Console.WriteLine($"DEBUG: Token count result for {currentModel}: count={count}, encoding={encodingName}, isProxy={isProxy}");
+
+                    string suffix = isProxy
+                        ? $" (proxy: {encodingName})"
+                        : $" (tokenizer: {encodingName})";
+                    string newDisplay = $"Tokens: {count}{suffix}";
+
+                    Application.Current?.Dispatcher?.Invoke(() => // Update UI on UI thread
+                    {
+                        TokenCountDisplay = newDisplay;
+                        Console.WriteLine($"DEBUG: TokenCountDisplay updated to: {newDisplay}");
+                    });
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"ERROR: Token counting error: {ex.Message}");
+                    Application.Current?.Dispatcher?.Invoke(() =>
+                    {
+                        TokenCountDisplay = "Tokens: Error calculating";
+                    });
+                }
+            });
         }
 
         public bool IsBusy
@@ -186,13 +299,34 @@ namespace RepoToTxtGui
         // Constructor
         public MainWindowViewModel()
         {
+            try
+            {
+                _tokenCounterService = new TokenCounterService();
+                _tokenCounterAvailable = true;
+                Console.WriteLine("DEBUG: Token counter service initialized successfully, _tokenCounterAvailable = true");
+            }
+            catch (Exception ex)
+            {
+                _tokenCounterAvailable = false;
+                _tokenCounterService = null;
+                Console.WriteLine($"DEBUG: Token counter initialization failed: {ex.Message}");
+                MessageBox.Show($"Error initializing token counter: {ex.Message}\n\nThe application will continue without token counting functionality.",
+                    "Token Counter Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+
             SelectFolderCommand = new RelayCommand(async _ => await SelectFolderAndProcessAsync(), _ => !IsBusy);
             SelectOutputFileCommand = new RelayCommand(_ => SelectOutputFile(), _ => !IsBusy && !IsOutputToConsole);
             CopyToClipboardCommand = new RelayCommand(CopyOutputToClipboard, _ => !IsBusy && !string.IsNullOrEmpty(OutputText));
             SaveToFileCommand = new RelayCommand(async _ => await SaveToFileAsync(), _ => !IsBusy && !IsOutputToConsole && !string.IsNullOrEmpty(OutputText));
 
-            // Initialize with default exclusions
-            UpdateExclusionsBasedOnPresets(); // Initialize exclusions
+            UpdateExclusionsBasedOnPresets();
+
+            // Only initialize token counting if the service was successfully created
+            if (_tokenCounterAvailable)
+            {
+                Console.WriteLine("DEBUG: Initial token count calculation on startup");
+                _ = UpdateTokenCountAsync(_outputText);
+            }
         }
 
         private void UpdateExclusionsBasedOnPresets()
@@ -344,6 +478,13 @@ namespace RepoToTxtGui
             {
                 IsBusy = false;
                 CommandManager.InvalidateRequerySuggested();
+
+                // Explicitly update token count now that IsBusy is set to false
+                if (_tokenCounterAvailable && !string.IsNullOrEmpty(_outputText))
+                {
+                    Console.WriteLine("DEBUG: Explicitly updating token count after folder load is complete");
+                    await UpdateTokenCountAsync(_outputText);
+                }
             }
         }
 
@@ -713,8 +854,11 @@ namespace RepoToTxtGui
                     }
 
                     await Application.Current.Dispatcher.BeginInvoke(() => // Use BeginInvoke for lower priority UI update
-                        OutputText = outputBuilder.ToString(),
-                        System.Windows.Threading.DispatcherPriority.Background);
+                    {
+                        Console.WriteLine($"DEBUG: About to set OutputText in RegenerateOutputAsync, length = {outputBuilder.Length}");
+                        OutputText = outputBuilder.ToString();
+                        Console.WriteLine("DEBUG: OutputText was set in RegenerateOutputAsync");
+                    }, System.Windows.Threading.DispatcherPriority.Background);
                 });
             }
             catch (Exception ex)
@@ -727,12 +871,21 @@ namespace RepoToTxtGui
             }
             finally
             {
+                bool shouldUpdateTokens = !string.IsNullOrEmpty(_outputText) && _tokenCounterAvailable;
+
                 await Application.Current.Dispatcher.BeginInvoke(() =>
                 {
                     StatusText = "Ready";
                     IsBusy = false;
                     CommandManager.InvalidateRequerySuggested();
                 }, System.Windows.Threading.DispatcherPriority.Background);
+
+                // Ensure token count is updated after we're no longer busy
+                if (shouldUpdateTokens)
+                {
+                    Console.WriteLine("DEBUG: Explicitly updating token count after RegenerateOutputAsync completes");
+                    await UpdateTokenCountAsync(_outputText);
+                }
             }
         }
 
