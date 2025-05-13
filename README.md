@@ -1,4 +1,5 @@
 # RepoToText
+![image](https://github.com/user-attachments/assets/2dc26203-8a1d-4396-b9e5-e17011054d47)
 
 RepoToText is a WPF application that allows you to easily extract the contents of a code repository into a plain text format. It's particularly useful for:
 
