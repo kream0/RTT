@@ -218,6 +218,8 @@
                                         Value="{Binding DataContext.IsUiEnabled, RelativeSource={RelativeSource AncestorType=Window}}"/>
                                 <Setter Property="Foreground"
                                         Value="{DynamicResource TextBrush}"/>
+                                <Setter Property="IsExpanded"
+                                        Value="{Binding IsExpanded, Mode=TwoWay}"/>
                             </Style>
                         </TreeView.ItemContainerStyle>
                         <TreeView.ItemTemplate>

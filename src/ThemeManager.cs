@@ -31,7 +31,6 @@ namespace RepoToTxtGui
 
             SaveCurrentThemePreference(theme);
         }
-
         public static AppTheme LoadCurrentThemePreference()
         {
             // This is a placeholder for loading from a persistent store like settings or registry.
@@ -47,9 +46,9 @@ namespace RepoToTxtGui
             }
             catch
             {
-                // Ignore errors loading preference, default to Light.
+                // Ignore errors loading preference, default to Dark.
             }
-            return AppTheme.Light; // Default theme
+            return AppTheme.Dark; // Default theme changed to Dark
         }
 
         private static void SaveCurrentThemePreference(AppTheme theme)

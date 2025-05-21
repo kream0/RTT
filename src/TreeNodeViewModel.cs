@@ -10,12 +10,26 @@ namespace RepoToTxtGui
     {
         private bool? _isChecked = false; // Use nullable bool for tri-state
         private bool _isUpdatingCheckState = false; // Prevent recursive loops
+        private bool _isExpanded = false; // Add IsExpanded property
 
         public string Name { get; set; }
         public string FullPath { get; set; }
         public bool IsDirectory { get; set; }
         public TreeNodeViewModel? Parent { get; }
         public ObservableCollection<TreeNodeViewModel> Children { get; } = new ObservableCollection<TreeNodeViewModel>();
+
+        public bool IsExpanded
+        {
+            get => _isExpanded;
+            set
+            {
+                if (_isExpanded != value)
+                {
+                    _isExpanded = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
 
         public TreeNodeViewModel(string name, string fullPath, bool isDirectory, TreeNodeViewModel? parent = null)
         {

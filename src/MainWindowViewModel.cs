@@ -46,7 +46,7 @@ namespace RepoToTxtGui
         private string? _outputFilePath;
         private bool _isBusy = false;
         private bool _isOutputToConsole = true; // Changed default value to true
-        private bool _isDarkMode = false;
+        private bool _isDarkMode = true;
         private string? _statusText;
         private bool _useWebPreset = true;
         private string _userPrePrompt = string.Empty;
@@ -549,6 +549,30 @@ namespace RepoToTxtGui
                         // For initial load, check everything by default
                         rootNode.SetIsChecked(true, true, false);
                     }
+
+                    // Always expand the root node and its first level children
+                    rootNode.IsExpanded = true;
+
+                    // Expand first level children
+                    foreach (var child in rootNode.Children)
+                    {
+                        if (child.IsDirectory)
+                        {
+                            child.IsExpanded = true;
+                        }
+                    }
+
+                    // Always expand the root node and its first level
+                    rootNode.IsExpanded = true;
+
+                    // Expand first level children
+                    foreach (var child in rootNode.Children)
+                    {
+                        if (child.IsDirectory)
+                        {
+                            child.IsExpanded = true;
+                        }
+                    }
                 });
 
                 // Generate initial output
@@ -788,7 +812,7 @@ namespace RepoToTxtGui
                         }
                         else // Is a directory
                         {
-                            List<TreeNodeViewModel> childrenSnapshot = null;
+                            List<TreeNodeViewModel>? childrenSnapshot = null;
                             await Application.Current.Dispatcher.InvokeAsync(() =>
                             {
                                 childrenSnapshot = new List<TreeNodeViewModel>(node.Children.Reverse());
