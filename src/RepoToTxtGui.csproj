@@ -1,15 +1,19 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net9.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
+    <EnableDefaultPageItems>true</EnableDefaultPageItems>
+    <EnableDefaultCompileItems>true</EnableDefaultCompileItems>
+    <EnableDefaultXamlItems>true</EnableDefaultXamlItems>
   </PropertyGroup>
-
   <ItemGroup>
     <PackageReference Include="SharpToken" Version="1.2.17" />
   </ItemGroup>
+  <!-- We no longer need to exclude these files from None since they will be picked up as Page items -->
+  <ItemGroup>
+  </ItemGroup><!-- Removing explicit Page items since we're using EnableDefaultXamlItems=true now -->
 
 </Project>

@@ -32,7 +32,12 @@ namespace RepoToTxtGui
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
             Application.Current?.Dispatcher?.Invoke(CommandManager.InvalidateRequerySuggested);
-        }
+        }        // Commands
+        public ICommand SelectFolderCommand { get; private set; }
+        public ICommand SelectOutputFileCommand { get; private set; }
+        public ICommand CopyToClipboardCommand { get; private set; }
+        public ICommand SaveToFileCommand { get; private set; }
+        public ICommand RefreshCommand { get; private set; }
 
         // Backing fields
         private ObservableCollection<TreeNodeViewModel> _rootNodes = new ObservableCollection<TreeNodeViewModel>();
@@ -41,10 +46,13 @@ namespace RepoToTxtGui
         private string? _outputFilePath;
         private bool _isBusy = false;
         private bool _isOutputToConsole = true; // Changed default value to true
+        private bool _isDarkMode = false;
         private string? _statusText;
         private bool _useWebPreset = true;
         private string _userPrePrompt = string.Empty;
         private readonly HashSet<string> _detectedFileExtensions = new(StringComparer.OrdinalIgnoreCase);
+        private string _concatenatedFileContents = string.Empty; // For pre-prompt optimization
+        private CancellationTokenSource? _prePromptDebounceCts;
 
         // LLM Token Counting related fields
         private LlmModel _selectedLlmModel = LlmModel.Gpt4o; // Default model
@@ -57,9 +65,7 @@ namespace RepoToTxtGui
             set { _rootNodes = value; OnPropertyChanged(); }
         }
 
-        public ObservableCollection<FileTypeFilterViewModel> FileTypeFilters { get; } = new();
-
-        public string UserPrePrompt
+        public ObservableCollection<FileTypeFilterViewModel> FileTypeFilters { get; } = new(); public string UserPrePrompt
         {
             get => _userPrePrompt;
             set
@@ -68,38 +74,52 @@ namespace RepoToTxtGui
                 {
                     _userPrePrompt = value;
                     OnPropertyChanged();
-
-                    // Debounce the output regeneration to avoid lag when typing
-                    DebounceUserPrePromptChange();
+                    DebouncePrePromptUpdate(); // Optimized update for pre-prompt
                 }
             }
-        }
-
-        // Debouncing method for pre-prompt changes
+        }        // Debouncing method for pre-prompt changes
         private void DebounceUserPrePromptChange()
         {
-            if (!string.IsNullOrEmpty(SelectedFolderPath) && RootNodes.Count > 0 && !IsBusy)
-            {
-                // Cancel any previous pending operation
-                _debounceTokenSource?.Cancel();
-                _debounceTokenSource = new CancellationTokenSource();
-                var token = _debounceTokenSource.Token;
+            // This method is now replaced by DebouncePrePromptUpdate and UpdateOutputWithNewPrePrompt
+            // for better performance and to avoid focus loss.
+            // Kept for reference during transition or if needed elsewhere with original behavior.
+            // For now, UserPrePrompt setter calls DebouncePrePromptUpdate.
+        }
 
-                // Start a timer that will regenerate output after delay
-                Task.Delay(_debounceDelay, token).ContinueWith(t =>
+        private void DebouncePrePromptUpdate()
+        {
+            _prePromptDebounceCts?.Cancel();
+            _prePromptDebounceCts = new CancellationTokenSource();
+            var token = _prePromptDebounceCts.Token;
+
+            Task.Delay(_debounceDelay, token).ContinueWith(t =>
+            {
+                if (t.IsCanceled || token.IsCancellationRequested) return;
+                Application.Current?.Dispatcher?.Invoke(() =>
                 {
-                    if (!t.IsCanceled)
-                    {
-                        Application.Current?.Dispatcher?.InvokeAsync(async () =>
-                        {
-                            if (!IsBusy)
-                            {
-                                await RegenerateOutputAsync();
-                            }
-                        });
-                    }
-                }, TaskContinuationOptions.OnlyOnRanToCompletion);
+                    if (token.IsCancellationRequested) return;
+                    UpdateOutputWithNewPrePrompt();
+                });
+            }, TaskScheduler.Default);
+        }
+
+        private void UpdateOutputWithNewPrePrompt()
+        {
+            if (IsBusy) // If a full regeneration is in progress, skip this lightweight update.
+            {
+                // Optionally, queue this update to run after IsBusy is false.
+                // For now, just skip to keep it simple. The full regeneration will include the latest pre-prompt.
+                return;
             }
+
+            var sb = new StringBuilder();
+            if (!string.IsNullOrWhiteSpace(UserPrePrompt))
+            {
+                sb.AppendLine(UserPrePrompt.Trim());
+                sb.AppendLine();
+            }
+            sb.Append(_concatenatedFileContents);
+            OutputText = sb.ToString(); // This will trigger token updates via its setter
         }
 
         public string OutputText
@@ -220,6 +240,24 @@ namespace RepoToTxtGui
         }
 
         public bool IsUiEnabled => !IsBusy;
+        public bool IsPrePromptTextBoxEnabled => true; // Pre-prompt textbox should remain enabled even during brief busy states from its own updates.
+                                                       // If global IsBusy is true due to other long operations (like initial load),
+                                                       // it might still be effectively non-interactive, but focus won't be lost.
+                                                       // A more robust solution might bind to a combined state: IsUiEnabled || IsPrePromptUpdateInProgress
+
+        public bool IsDarkMode
+        {
+            get => _isDarkMode;
+            set
+            {
+                if (_isDarkMode != value)
+                {
+                    _isDarkMode = value;
+                    OnPropertyChanged();
+                    ThemeManager.ApplyTheme(_isDarkMode ? ThemeManager.AppTheme.Dark : ThemeManager.AppTheme.Light);
+                }
+            }
+        }
 
         public string? StatusText
         {
@@ -288,13 +326,7 @@ namespace RepoToTxtGui
                     UpdateExclusionsAndRefreshTree();
                 }
             }
-        }
-
-        // Commands
-        public ICommand SelectFolderCommand { get; }
-        public ICommand SelectOutputFileCommand { get; }
-        public ICommand CopyToClipboardCommand { get; }
-        public ICommand SaveToFileCommand { get; }
+        }        // Commands
 
         // Constructor
         public MainWindowViewModel()
@@ -313,13 +345,14 @@ namespace RepoToTxtGui
                 MessageBox.Show($"Error initializing token counter: {ex.Message}\n\nThe application will continue without token counting functionality.",
                     "Token Counter Error", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
-
             SelectFolderCommand = new RelayCommand(async _ => await SelectFolderAndProcessAsync(), _ => !IsBusy);
             SelectOutputFileCommand = new RelayCommand(_ => SelectOutputFile(), _ => !IsBusy && !IsOutputToConsole);
             CopyToClipboardCommand = new RelayCommand(CopyOutputToClipboard, _ => !IsBusy && !string.IsNullOrEmpty(OutputText));
             SaveToFileCommand = new RelayCommand(async _ => await SaveToFileAsync(), _ => !IsBusy && !IsOutputToConsole && !string.IsNullOrEmpty(OutputText));
+            RefreshCommand = new RelayCommand(async _ => await RefreshFolderAsync(), _ => !IsBusy && !string.IsNullOrEmpty(SelectedFolderPath)); UpdateExclusionsBasedOnPresets();
 
-            UpdateExclusionsBasedOnPresets();
+            // Initialize dark mode from saved preference
+            _isDarkMode = ThemeManager.LoadCurrentThemePreference() == ThemeManager.AppTheme.Dark;
 
             // Only initialize token counting if the service was successfully created
             if (_tokenCounterAvailable)
@@ -415,10 +448,59 @@ namespace RepoToTxtGui
                 OutputFilePath = dialog.FileName;
             }
         }
-
-        private async Task LoadFolderAsync()
+        private async Task RefreshFolderAsync()
         {
-            if (string.IsNullOrEmpty(_selectedFolderPath) || !Directory.Exists(_selectedFolderPath))
+            if (string.IsNullOrEmpty(SelectedFolderPath) || IsBusy) return;
+
+            // Store the current pre-prompt and file content cache before refresh
+            string currentPrePrompt = UserPrePrompt;
+            string currentFileContentCache = _concatenatedFileContents;
+
+            // 1. Store current selection
+            var selectedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var stack = new Stack<TreeNodeViewModel>(RootNodes);
+            while (stack.Count > 0)
+            {
+                var node = stack.Pop();
+                if (node.IsChecked == true || node.IsChecked == null) // True or Indeterminate
+                {
+                    selectedPaths.Add(node.FullPath);
+                }
+                // For files, IsChecked == null isn't typical unless explicitly set,
+                // but for directories, it means some children are checked.
+                // If a directory is indeterminate, we want to re-evaluate it based on its children after refresh.
+                // If a file was checked, it should remain checked.
+                // If a directory was fully checked, it should remain fully checked (if all children still exist and are checked).
+                // Storing FullPath for all IsChecked==true and IsChecked==null items is a good heuristic.
+                // The actual check state will be re-calculated bottom-up after restoring individual node states.
+
+                foreach (var child in node.Children.Reverse()) // Process in a way that mimics visual order if needed
+                {
+                    stack.Push(child);
+                }
+            }
+
+            // Ensure root folder path is included if it was effectively selected
+            if (RootNodes.Any(r => r.IsChecked == true || r.IsChecked == null) && !string.IsNullOrEmpty(SelectedFolderPath))
+            {
+                selectedPaths.Add(SelectedFolderPath);
+            }
+
+            await LoadFolderAsync(selectedPaths);
+
+            // Restore the pre-prompt and update the UI after refresh is complete
+            if (!string.IsNullOrEmpty(currentPrePrompt))
+            {
+                UserPrePrompt = currentPrePrompt;
+                // Restore the concatenated file contents to maintain the preview
+                _concatenatedFileContents = currentFileContentCache;
+                UpdateOutputWithNewPrePrompt();
+            }
+        }
+
+        private async Task LoadFolderAsync(HashSet<string>? selectionToRestore = null)
+        {
+            if (string.IsNullOrEmpty(SelectedFolderPath) || !Directory.Exists(SelectedFolderPath))
             {
                 OutputText = "Selected folder is invalid.";
                 StatusText = "Error: Invalid folder";
@@ -426,7 +508,7 @@ namespace RepoToTxtGui
             }
 
             IsBusy = true;
-            StatusText = "Loading folder structure...";
+            StatusText = selectionToRestore == null ? "Loading folder structure..." : "Refreshing folder structure...";
             OutputText = string.Empty; // Clear previous output
 
             Application.Current.Dispatcher.Invoke(() =>
@@ -440,11 +522,9 @@ namespace RepoToTxtGui
 
             try
             {
-                var rootDirInfo = new DirectoryInfo(_selectedFolderPath);
-                var rootNode = new TreeNodeViewModel(rootDirInfo.Name, rootDirInfo.FullName, true);
-
-                // Populate TreeView in background
-                await Task.Run(() => BuildTree(rootDirInfo, rootNode, _detectedFileExtensions));
+                var rootDirInfo = new DirectoryInfo(SelectedFolderPath);
+                var rootNode = new TreeNodeViewModel(rootDirInfo.Name, rootDirInfo.FullName, true);                // Populate TreeView in background
+                await Task.Run(() => BuildTree(rootDirInfo, rootNode, _detectedFileExtensions, selectionToRestore));
 
                 var sortedExtensions = _detectedFileExtensions.OrderBy(ext => ext).ToList();
                 var newFilters = new List<FileTypeFilterViewModel>();
@@ -457,7 +537,18 @@ namespace RepoToTxtGui
                 {
                     foreach (var filter in newFilters) FileTypeFilters.Add(filter);
                     RootNodes.Add(rootNode);
-                    rootNode.SetIsChecked(true, true, false);
+
+                    // Apply selection states based on whether this is a fresh load or a refresh
+                    if (selectionToRestore != null && selectionToRestore.Count > 0)
+                    {
+                        // When refreshing, restore previously checked items
+                        TraverseAndApplyRestoredSelection(rootNode, selectionToRestore);
+                    }
+                    else
+                    {
+                        // For initial load, check everything by default
+                        rootNode.SetIsChecked(true, true, false);
+                    }
                 });
 
                 // Generate initial output
@@ -489,7 +580,10 @@ namespace RepoToTxtGui
         }
 
         // Tree building and file handling
-        private void BuildTree(DirectoryInfo currentDirInfo, TreeNodeViewModel parentNode, HashSet<string> detectedExtensions)
+        private void BuildTree(DirectoryInfo currentDirInfo,
+        TreeNodeViewModel parentNode,
+        HashSet<string> detectedExtensions,
+        HashSet<string>? selectionToRestore = null)
         {
             var childrenToAdd = new List<TreeNodeViewModel>();
 
@@ -506,15 +600,15 @@ namespace RepoToTxtGui
                         continue;
                     }
 
-                    // Check exclusion for initial state setting
-                    bool initiallyExcluded = IsPathInitiallyExcluded(dirInfo.Name, dirInfo.FullName, true);
                     var dirNode = new TreeNodeViewModel(dirInfo.Name, dirInfo.FullName, true, parentNode);
-                    dirNode.SetIsChecked(!initiallyExcluded, false, false); // Set initial state without propagation yet
+
+                    // Note: We don't set IsChecked here - it will be handled in LoadFolderAsync
+                    // after the full tree structure is built and added to the UI.
 
                     // Add to collection for later sorted addition
                     childrenToAdd.Add(dirNode);
 
-                    BuildTree(dirInfo, dirNode, detectedExtensions); // Recurse
+                    BuildTree(dirInfo, dirNode, detectedExtensions, selectionToRestore); // Recurse
                 }
             }
             catch (UnauthorizedAccessException) { /* Skip inaccessible folders */ }
@@ -567,6 +661,47 @@ namespace RepoToTxtGui
                     }, System.Windows.Threading.DispatcherPriority.Background);
                 }
             }
+        }
+
+        /// <summary>
+        /// Traverses the tree and applies the restored selection states from a previous refresh
+        /// </summary>
+        /// <param name="node">The current node being processed</param>
+        /// <param name="selectionToRestore">Set of paths to restore as checked</param>
+        /// <returns>True if any child node was selected, false otherwise</returns>
+        private bool TraverseAndApplyRestoredSelection(TreeNodeViewModel node, HashSet<string> selectionToRestore)
+        {
+            bool anyChildSelected = false;
+            bool isCurrentNodeSelected = selectionToRestore.Contains(node.FullPath);
+
+            // Process children first (bottom-up approach)
+            foreach (var child in node.Children)
+            {
+                bool isChildSelected = TraverseAndApplyRestoredSelection(child, selectionToRestore);
+                if (isChildSelected)
+                {
+                    anyChildSelected = true;
+                }
+            }
+
+            // If this is a directory and any of its children are selected, or if it's explicitly selected
+            if ((node.IsDirectory && anyChildSelected) || isCurrentNodeSelected)
+            {
+                // We use SetIsChecked(true, false, false) to avoid recursive propagation
+                // which would override the carefully restored child states
+                node.SetIsChecked(true, false, false);
+                return true;
+            }
+
+            // For files, directly set the state based on selection
+            if (!node.IsDirectory)
+            {
+                bool shouldCheck = isCurrentNodeSelected;
+                node.SetIsChecked(shouldCheck, false, false);
+                return shouldCheck;
+            }
+
+            return false;
         }
 
         // New method to determine if a directory should be completely excluded
@@ -735,7 +870,7 @@ namespace RepoToTxtGui
                         string nodeFullPath_directRead = node.FullPath;
 
                         bool? nodeIsChecked = null; // Initialize to prevent CS0165
-                        List<TreeNodeViewModel> childrenSnapshot = null;
+                        List<TreeNodeViewModel>? childrenSnapshot = null;
 
                         // Dispatch to UI thread only for IsChecked (mutable) and Children collection (UI-owned)
                         await Application.Current.Dispatcher.InvokeAsync(() =>
@@ -771,33 +906,21 @@ namespace RepoToTxtGui
                     var sortedRelativePaths = filesToProcessMap.Keys.ToList();
                     sortedRelativePaths.Sort(StringComparer.OrdinalIgnoreCase);
 
-                    var outputBuilder = new StringBuilder();
-
-                    string localUserPrePrompt = string.Empty; // Read UserPrePrompt via Dispatcher as it's a UI-bound property
-                    await Application.Current.Dispatcher.InvokeAsync(() =>
-                        localUserPrePrompt = UserPrePrompt,
-                        System.Windows.Threading.DispatcherPriority.Background);
-
-
-                    if (!string.IsNullOrWhiteSpace(localUserPrePrompt))
-                    {
-                        outputBuilder.AppendLine(localUserPrePrompt.Trim());
-                        outputBuilder.AppendLine();
-                    }
-
+                    // Generate the files content without pre-prompt for caching
+                    var fileContentBuilder = new StringBuilder();
                     if (!sortedRelativePaths.Any())
                     {
-                        outputBuilder.AppendLine("No files selected or found based on current selection.");
+                        fileContentBuilder.AppendLine("No files selected or found based on current selection.");
                     }
                     else
                     {
-                        outputBuilder.AppendLine("Directory Structure:");
-                        outputBuilder.AppendLine();
-                        BuildTreeStringInternal(sortedRelativePaths, outputBuilder);
-                        outputBuilder.AppendLine();
+                        fileContentBuilder.AppendLine("Directory Structure:");
+                        fileContentBuilder.AppendLine();
+                        BuildTreeStringInternal(sortedRelativePaths, fileContentBuilder);
+                        fileContentBuilder.AppendLine();
 
-                        outputBuilder.AppendLine("--- File Contents ---");
-                        outputBuilder.AppendLine();
+                        fileContentBuilder.AppendLine("--- File Contents ---");
+                        fileContentBuilder.AppendLine();
 
                         var fileContents = new ConcurrentDictionary<string, string>();
                         var fileReadErrors = new ConcurrentDictionary<string, string>();
@@ -841,17 +964,38 @@ namespace RepoToTxtGui
 
                         foreach (var relativePath in sortedRelativePaths)
                         {
-                            outputBuilder.AppendLine($"\n---\nFile: /{relativePath}\n---");
+                            fileContentBuilder.AppendLine($"\n---\nFile: /{relativePath}\n---");
                             if (fileReadErrors.TryGetValue(relativePath, out var error))
                             {
-                                outputBuilder.AppendLine(error);
+                                fileContentBuilder.AppendLine(error);
                             }
                             else if (fileContents.TryGetValue(relativePath, out var content))
                             {
-                                outputBuilder.AppendLine(content);
+                                fileContentBuilder.AppendLine(content);
                             }
                         }
                     }
+
+                    // Store the file content without pre-prompt
+                    _concatenatedFileContents = fileContentBuilder.ToString();
+
+                    // Now create the full output with the pre-prompt
+                    var outputBuilder = new StringBuilder();
+                    string localUserPrePrompt = string.Empty;
+
+                    // Get the current pre-prompt from the UI thread
+                    await Application.Current.Dispatcher.InvokeAsync(() =>
+                        localUserPrePrompt = UserPrePrompt,
+                        System.Windows.Threading.DispatcherPriority.Background);
+
+                    if (!string.IsNullOrWhiteSpace(localUserPrePrompt))
+                    {
+                        outputBuilder.AppendLine(localUserPrePrompt.Trim());
+                        outputBuilder.AppendLine();
+                    }
+
+                    // Append the file content
+                    outputBuilder.Append(_concatenatedFileContents);
 
                     await Application.Current.Dispatcher.BeginInvoke(() => // Use BeginInvoke for lower priority UI update
                     {

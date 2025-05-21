@@ -14,6 +14,9 @@ public partial class App : System.Windows.Application
     {
         try
         {
+            // Apply the stored or default theme on startup
+            ThemeManager.ApplyTheme(ThemeManager.LoadCurrentThemePreference());
+
             base.OnStartup(e);
             MainWindow mainWindow = new MainWindow();
             mainWindow.Show();

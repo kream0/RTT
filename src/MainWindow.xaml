@@ -8,18 +8,34 @@
         Title="Repository To Text"
         Height="750"
         Width="900"
+        Background="{DynamicResource WindowBackgroundBrush}"
         WindowStartupLocation="CenterScreen">
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
         <local:ZeroToCollapsedConverter x:Key="InverseZeroToCollapsedConverter"/>
-    </Window.Resources>
 
-    <DockPanel Margin="10">
+        <!-- Basic Style for GridSplitter to be visible. More specific styling in theme files. -->
+        <Style TargetType="GridSplitter">
+            <Setter Property="Background"
+                    Value="{DynamicResource GridSplitterBackgroundBrush}"/>
+            <Setter Property="Width"
+                    Value="5"/>
+            <Setter Property="HorizontalAlignment"
+                    Value="Stretch"/>
+            <Setter Property="VerticalAlignment"
+                    Value="Stretch"/>
+            <Setter Property="ResizeBehavior"
+                    Value="PreviousAndNext"/>
+        </Style>
+    </Window.Resources>
+    <DockPanel Margin="10"
+               Background="{DynamicResource WindowBackgroundBrush}">
         <!-- Top Panel: Controls -->
         <Grid DockPanel.Dock="Top"
               Margin="0,0,0,10">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
@@ -31,8 +47,15 @@
             <Button Grid.Column="1"
                     Content="Select Folder..."
                     Padding="10,3"
-                    Command="{Binding SelectFolderCommand}"/>
+                    Command="{Binding SelectFolderCommand}"
+                    Style="{DynamicResource DefaultButtonStyle}"/>
             <Button Grid.Column="2"
+                    Content="Refresh"
+                    Command="{Binding RefreshCommand}"
+                    Padding="10,3"
+                    Margin="5,0,0,0"
+                    Style="{DynamicResource DefaultButtonStyle}"/>
+            <Button Grid.Column="3"
                     Content="Copy to Clipboard"
                     Command="{Binding CopyToClipboardCommand}"
                     IsEnabled="{Binding IsUiEnabled}"
@@ -45,11 +68,16 @@
                     Orientation="Horizontal"
                     Margin="0,0,0,10">
             <CheckBox Content="Use web development exclusion presets"
+                      Foreground="{DynamicResource TextBrush}"
                       Margin="0,0,15,0"
                       IsChecked="{Binding UseWebPreset, Mode=TwoWay}"/>
             <CheckBox Content="Output to preview (instead of file)"
+                      Foreground="{DynamicResource TextBrush}"
                       Margin="0,0,15,0"
                       IsChecked="{Binding IsOutputToConsole, Mode=TwoWay}"/>
+            <CheckBox Content="Dark Mode"
+                      Foreground="{DynamicResource TextBrush}"
+                      IsChecked="{Binding IsDarkMode, Mode=TwoWay}"/>
         </StackPanel>
 
         <Grid DockPanel.Dock="Top"
@@ -63,14 +91,17 @@
                      Text="{Binding OutputFilePath, Mode=TwoWay}"
                      IsEnabled="{Binding IsOutputFileEnabled}"
                      Margin="0,0,5,0"
+                     Style="{DynamicResource DefaultTextBoxStyle}"
                      Padding="3"/>
             <Button Grid.Column="1"
                     Content="Browse..."
                     IsEnabled="{Binding IsOutputFileEnabled}"
                     Command="{Binding SelectOutputFileCommand}"
-                    Padding="10,3"/>
+                    Padding="10,3"
+                    Style="{DynamicResource DefaultButtonStyle}"/>
             <Button Grid.Column="2"
                     Content="Save"
+                    Style="{DynamicResource DefaultButtonStyle}"
                     Command="{Binding SaveToFileCommand}"
                     IsEnabled="{Binding IsOutputFileEnabled}"
                     Margin="5,0,0,0"
@@ -83,6 +114,7 @@
                    Visibility="{Binding FileTypeFilters.Count, Converter={StaticResource InverseZeroToCollapsedConverter}, FallbackValue=Collapsed, ConverterParameter=InverseZeroToCollapsed}">
             <TextBlock Text="Filter by File Type (Checked types are included):"
                        VerticalAlignment="Center"
+                       Foreground="{DynamicResource TextBrush}"
                        Margin="0,0,10,0"
                        DockPanel.Dock="Left"/>
             <ScrollViewer HorizontalScrollBarVisibility="Auto"
@@ -97,6 +129,7 @@
                         <DataTemplate>
                             <CheckBox Content="{Binding DisplayName}"
                                       IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                      Foreground="{DynamicResource TextBrush}"
                                       Margin="5,2"
                                       IsEnabled="{Binding DataContext.IsUiEnabled, RelativeSource={RelativeSource AncestorType=Window}}"/>
                         </DataTemplate>
@@ -104,11 +137,11 @@
                 </ItemsControl>
             </ScrollViewer>
         </DockPanel>
-
         <!-- User Pre-Prompt Section -->
         <DockPanel DockPanel.Dock="Top"
                    Margin="0,0,0,10">
             <TextBlock Text="Custom Pre-Prompt (optional):"
+                       Foreground="{DynamicResource TextBrush}"
                        DockPanel.Dock="Top"
                        Margin="0,0,0,5"/>
             <TextBox Text="{Binding UserPrePrompt, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
@@ -117,25 +150,29 @@
                      MinHeight="40"
                      MaxHeight="120"
                      VerticalScrollBarVisibility="Auto"
-                     BorderBrush="LightGray"
+                     Style="{DynamicResource DefaultTextBoxStyle}"
                      BorderThickness="1"
                      Padding="3"
-                     IsEnabled="{Binding IsUiEnabled}"/>
+                     IsEnabled="{Binding IsPrePromptTextBoxEnabled}"/>
         </DockPanel>
-
         <!-- LLM Model Selection and Token Count -->
         <DockPanel DockPanel.Dock="Top"
-                Margin="0,0,0,10">
+                   Margin="0,0,0,10">
             <TextBlock Text="LLM Model:"
-                    VerticalAlignment="Center"
-                    Margin="0,0,5,0"/>
+                       Foreground="{DynamicResource TextBrush}"
+                       VerticalAlignment="Center"
+                       Margin="0,0,5,0"/>
             <ComboBox ItemsSource="{Binding AvailableLlmModels}"
                       SelectedItem="{Binding SelectedLlmModel, Mode=TwoWay}"
                       MinWidth="150"
+                      Style="{DynamicResource DefaultComboBoxStyle}"
+                      Background="{DynamicResource ControlBackgroundBrush}"
+                      Foreground="{DynamicResource TextBrush}"
                       VerticalAlignment="Center"
                       Margin="0,0,10,0"
                       IsEnabled="{Binding IsUiEnabled}"/>
             <TextBlock Text="{Binding TokenCountDisplay, Mode=OneWay}"
+                       Foreground="{DynamicResource TextBrush}"
                        VerticalAlignment="Center"
                        Margin="5,0,0,0"
                        ToolTip="Token count based on selected model. 'proxy' indicates an estimation using a common tokenizer."/>
@@ -150,30 +187,44 @@
                 <!-- StatusBar Row -->
             </Grid.RowDefinitions>
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="250"/>
-                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="250"
+                                  MinWidth="150"/>
+                <ColumnDefinition Width="Auto"/>
+                <!-- GridSplitter -->
+                <ColumnDefinition Width="*"
+                                  MinWidth="200"/>
             </Grid.ColumnDefinitions>
-
             <!-- Left Column: Tree View -->
-            <Border BorderBrush="LightGray"
+            <Border x:Name="TreeViewBorder"
+                    BorderBrush="{DynamicResource BorderBrush}"
                     BorderThickness="1"
                     Grid.Column="0"
-                    Grid.Row="0">
-                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                    Grid.Row="0"
+                    PreviewMouseWheel="TreeViewBorder_PreviewMouseWheel"
+                    Background="{DynamicResource ControlBackgroundBrush}">
+                <ScrollViewer x:Name="TreeViewScrollViewer"
+                              Style="{DynamicResource DefaultScrollViewerStyle}"
+                              VerticalScrollBarVisibility="Auto"
                               HorizontalScrollBarVisibility="Auto">
                     <TreeView ItemsSource="{Binding RootNodes}"
+                              Background="{DynamicResource ControlBackgroundBrush}"
+                              Foreground="{DynamicResource TextBrush}"
+                              BorderBrush="{DynamicResource BorderBrush}"
                               VirtualizingPanel.IsVirtualizing="True"
                               VirtualizingPanel.VirtualizationMode="Recycling">
                         <TreeView.ItemContainerStyle>
                             <Style TargetType="{x:Type TreeViewItem}">
                                 <Setter Property="IsEnabled"
                                         Value="{Binding DataContext.IsUiEnabled, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                                <Setter Property="Foreground"
+                                        Value="{DynamicResource TextBrush}"/>
                             </Style>
                         </TreeView.ItemContainerStyle>
                         <TreeView.ItemTemplate>
                             <HierarchicalDataTemplate ItemsSource="{Binding Children}">
                                 <StackPanel Orientation="Horizontal">
                                     <CheckBox IsChecked="{Binding IsChecked, Mode=TwoWay}"
+                                              Foreground="{DynamicResource TextBrush}"
                                               VerticalAlignment="Center"
                                               Checked="CheckBox_Checked"
                                               Unchecked="CheckBox_Unchecked"/>
@@ -187,16 +238,19 @@
                 </ScrollViewer>
             </Border>
 
+            <GridSplitter Grid.Column="1"
+                          Grid.Row="0"/>
+
             <!-- Right Column: Output Preview -->
-            <Grid Grid.Column="1"
+            <Grid Grid.Column="2"
                   Grid.Row="0"
                   Margin="10,0,0,0">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
-
                 <TextBlock Grid.Row="0"
+                           Foreground="{DynamicResource TextBrush}"
                            Text="Preview:"
                            FontWeight="Bold"
                            Margin="0,0,0,5"/>
@@ -209,20 +263,20 @@
                          HorizontalScrollBarVisibility="Auto"
                          FontFamily="Consolas"
                          TextWrapping="NoWrap"
+                         Style="{DynamicResource DefaultTextBoxStyle}"
                          IsEnabled="{Binding IsUiEnabled}"
-                         BorderBrush="LightGray"
                          BorderThickness="1"/>
             </Grid>
-
             <!-- Busy Overlay -->
             <Grid Grid.Row="0"
                   Grid.Column="0"
-                  Grid.ColumnSpan="2"
-                  Background="#AAFFFFFF"
+                  Grid.ColumnSpan="3"
+                  Background="{DynamicResource BusyOverlayBackgroundBrush}"
                   Visibility="{Binding IsBusy, Converter={StaticResource BooleanToVisibilityConverter}}">
                 <TextBlock Text="Processing..."
                            HorizontalAlignment="Center"
                            VerticalAlignment="Center"
+                           Foreground="{DynamicResource BusyOverlayTextBrush}"
                            FontSize="16"
                            FontWeight="Bold"/>
             </Grid>
@@ -230,10 +284,12 @@
             <!-- Status Bar -->
             <StatusBar Grid.Row="1"
                        Grid.Column="0"
-                       Grid.ColumnSpan="2"
+                       Grid.ColumnSpan="3"
                        VerticalAlignment="Bottom"
+                       Background="{DynamicResource StatusBarBackgroundBrush}"
                        Height="22">
-                <TextBlock Text="{Binding StatusText, Mode=OneWay, TargetNullValue=Ready}"/>
+                <TextBlock Text="{Binding StatusText, Mode=OneWay, TargetNullValue=Ready}"
+                           Foreground="{DynamicResource StatusBarTextBrush}"/>
                 <ProgressBar Width="100"
                              Height="15"
                              Visibility="{Binding IsBusy, Converter={StaticResource BooleanToVisibilityConverter}}"

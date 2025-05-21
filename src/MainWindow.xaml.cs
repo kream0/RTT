@@ -2,6 +2,7 @@
 using System.Windows;
 using System.Windows.Controls; // Specifically using System.Windows.Controls for CheckBox
 using System.Threading.Tasks;
+using System.Windows.Input; // For MouseWheelEventArgs
 
 namespace RepoToTxtGui;
 
@@ -46,6 +47,17 @@ public partial class MainWindow : Window
                     await vm.RegenerateOutputAsync();
                 }
             }, System.Windows.Threading.DispatcherPriority.Background); // Use Background priority
+        }
+    }
+    private void TreeViewBorder_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        // Find the ScrollViewer in the visual tree
+        if (!e.Handled && FindName("TreeViewScrollViewer") is ScrollViewer scrollViewer)
+        {
+            // Manually scroll the TreeViewScrollViewer
+            // Adjust delta for natural scrolling direction
+            scrollViewer.ScrollToVerticalOffset(scrollViewer.VerticalOffset - (e.Delta * 0.5)); // Adjust multiplier for scroll speed
+            e.Handled = true;
         }
     }
 }
