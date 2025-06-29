@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:RepoToTxtGui"
         mc:Ignorable="d"
-        Title="Repository To Text"
+        Title="{Binding WindowTitle}"
         Height="750"
         Width="900"
         Background="{DynamicResource WindowBackgroundBrush}"
@@ -187,66 +187,162 @@
                 <!-- StatusBar Row -->
             </Grid.RowDefinitions>
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="250"
-                                  MinWidth="150"/>
+                <ColumnDefinition Width="350"
+                        MinWidth="250"/>
+                <!-- Left Column: Tree View + Git Controls -->
                 <ColumnDefinition Width="Auto"/>
                 <!-- GridSplitter -->
                 <ColumnDefinition Width="*"
-                                  MinWidth="200"/>
+                        MinWidth="200"/>
+                <!-- Preview Panel -->
+                <ColumnDefinition Width="Auto"/>
+                <!-- GridSplitter for Git Diff -->
+                <ColumnDefinition Width="*"
+                        x:Name="GitDiffColumn"
+                        MinWidth="200"/>
+                <!-- Git Diff Panel -->
             </Grid.ColumnDefinitions>
-            <!-- Left Column: Tree View -->
-            <Border x:Name="TreeViewBorder"
-                    BorderBrush="{DynamicResource BorderBrush}"
-                    BorderThickness="1"
-                    Grid.Column="0"
-                    Grid.Row="0"
-                    PreviewMouseWheel="TreeViewBorder_PreviewMouseWheel"
-                    Background="{DynamicResource ControlBackgroundBrush}">
-                <ScrollViewer x:Name="TreeViewScrollViewer"
-                              Style="{DynamicResource DefaultScrollViewerStyle}"
-                              VerticalScrollBarVisibility="Auto"
-                              HorizontalScrollBarVisibility="Auto">
-                    <TreeView ItemsSource="{Binding RootNodes}"
-                              Background="{DynamicResource ControlBackgroundBrush}"
-                              Foreground="{DynamicResource TextBrush}"
-                              BorderBrush="{DynamicResource BorderBrush}"
-                              VirtualizingPanel.IsVirtualizing="True"
-                              VirtualizingPanel.VirtualizationMode="Recycling">
-                        <TreeView.ItemContainerStyle>
-                            <Style TargetType="{x:Type TreeViewItem}">
-                                <Setter Property="IsEnabled"
-                                        Value="{Binding DataContext.IsUiEnabled, RelativeSource={RelativeSource AncestorType=Window}}"/>
-                                <Setter Property="Foreground"
-                                        Value="{DynamicResource TextBrush}"/>
-                                <Setter Property="IsExpanded"
-                                        Value="{Binding IsExpanded, Mode=TwoWay}"/>
-                            </Style>
-                        </TreeView.ItemContainerStyle>
-                        <TreeView.ItemTemplate>
-                            <HierarchicalDataTemplate ItemsSource="{Binding Children}">
-                                <StackPanel Orientation="Horizontal">
-                                    <CheckBox IsChecked="{Binding IsChecked, Mode=TwoWay}"
-                                              Foreground="{DynamicResource TextBrush}"
-                                              VerticalAlignment="Center"
-                                              Checked="CheckBox_Checked"
-                                              Unchecked="CheckBox_Unchecked"/>
-                                    <TextBlock Text="{Binding Name}"
-                                               Margin="5,0,0,0"
-                                               VerticalAlignment="Center"/>
-                                </StackPanel>
-                            </HierarchicalDataTemplate>
-                        </TreeView.ItemTemplate>
-                    </TreeView>
-                </ScrollViewer>
-            </Border>
+            <!-- Left Column: Tree View + Git Controls -->
+            <Grid Grid.Column="0"
+                    Grid.Row="0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*"/>
+                    <!-- Tree View -->
+                    <RowDefinition Height="Auto"/>
+                    <!-- Git Controls -->
+                </Grid.RowDefinitions>
+
+                <!-- Tree View -->
+                <Border x:Name="TreeViewBorder"
+                        BorderBrush="{DynamicResource BorderBrush}"
+                        BorderThickness="1"
+                        Grid.Row="0"
+                        PreviewMouseWheel="TreeViewBorder_PreviewMouseWheel"
+                        Background="{DynamicResource ControlBackgroundBrush}">
+                    <ScrollViewer x:Name="TreeViewScrollViewer"
+                                  Style="{DynamicResource DefaultScrollViewerStyle}"
+                                  VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Auto">
+                        <TreeView ItemsSource="{Binding RootNodes}"
+                                  Background="{DynamicResource ControlBackgroundBrush}"
+                                  Foreground="{DynamicResource TextBrush}"
+                                  BorderBrush="{DynamicResource BorderBrush}"
+                                  VirtualizingPanel.IsVirtualizing="True"
+                                  VirtualizingPanel.VirtualizationMode="Recycling">
+                            <TreeView.ItemContainerStyle>
+                                <Style TargetType="{x:Type TreeViewItem}">
+                                    <Setter Property="IsEnabled"
+                                            Value="{Binding DataContext.IsUiEnabled, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                                    <Setter Property="Foreground"
+                                            Value="{DynamicResource TextBrush}"/>
+                                    <Setter Property="IsExpanded"
+                                            Value="{Binding IsExpanded, Mode=TwoWay}"/>
+                                </Style>
+                            </TreeView.ItemContainerStyle>
+                            <TreeView.ItemTemplate>
+                                <HierarchicalDataTemplate ItemsSource="{Binding Children}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <CheckBox IsChecked="{Binding IsChecked, Mode=TwoWay}"
+                                                  Foreground="{DynamicResource TextBrush}"
+                                                  VerticalAlignment="Center"
+                                                  Checked="CheckBox_Checked"
+                                                  Unchecked="CheckBox_Unchecked"/>
+                                        <TextBlock Text="{Binding Name}"
+                                                   Margin="5,0,0,0"
+                                                   VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </HierarchicalDataTemplate>
+                            </TreeView.ItemTemplate>
+                        </TreeView>
+                    </ScrollViewer>
+                </Border>
+
+                <!-- Git Controls GroupBox -->
+                <GroupBox Header="Git Diff"
+                          Grid.Row="1"
+                          Margin="0,10,0,0"
+                          Padding="5"
+                          Visibility="{Binding IsGitRepository, Converter={StaticResource BooleanToVisibilityConverter}}">
+                    <StackPanel>
+                        <!-- Mode Selection Radio Buttons -->
+                        <TextBlock Text="Select Diff Mode:"
+                                FontWeight="Bold"
+                                Foreground="{DynamicResource TextBrush}"/>
+                        <RadioButton Content="Pending Changes"
+                                     GroupName="DiffMode"
+                                     IsChecked="{Binding IsDiffModePending}"
+                                     Foreground="{DynamicResource TextBrush}"
+                                     Margin="0,2"/>
+                        <RadioButton Content="Two Branches"
+                                     GroupName="DiffMode"
+                                     IsChecked="{Binding IsDiffModeBranches}"
+                                     Foreground="{DynamicResource TextBrush}"
+                                     Margin="0,2"/>
+                        <RadioButton Content="Two Commits"
+                                     GroupName="DiffMode"
+                                     IsChecked="{Binding IsDiffModeCommits}"
+                                     Foreground="{DynamicResource TextBrush}"
+                                     Margin="0,2"/>
+
+                        <Separator Margin="0,10"/>
+
+                        <!-- Branch Selection Controls -->
+                        <StackPanel Visibility="{Binding IsDiffModeBranches, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <TextBlock Text="Branch 1:"
+                                    Foreground="{DynamicResource TextBrush}"/>
+                            <ComboBox ItemsSource="{Binding GitBranches}"
+                                      SelectedItem="{Binding SelectedBranch1}"
+                                      Style="{DynamicResource DefaultComboBoxStyle}"
+                                      Background="{DynamicResource ControlBackgroundBrush}"
+                                      Foreground="{DynamicResource TextBrush}"/>
+                            <TextBlock Text="Branch 2:"
+                                    Margin="0,5,0,0"
+                                    Foreground="{DynamicResource TextBrush}"/>
+                            <ComboBox ItemsSource="{Binding GitBranches}"
+                                      SelectedItem="{Binding SelectedBranch2}"
+                                      Style="{DynamicResource DefaultComboBoxStyle}"
+                                      Background="{DynamicResource ControlBackgroundBrush}"
+                                      Foreground="{DynamicResource TextBrush}"/>
+                        </StackPanel>
+
+                        <!-- Commit Selection Controls -->
+                        <StackPanel Visibility="{Binding IsDiffModeCommits, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <TextBlock Text="Commit Hash 1:"
+                                    Foreground="{DynamicResource TextBrush}"/>
+                            <TextBox Text="{Binding CommitHash1, UpdateSourceTrigger=PropertyChanged}"
+                                     Style="{DynamicResource DefaultTextBoxStyle}"/>
+                            <TextBlock Text="Commit Hash 2:"
+                                    Margin="0,5,0,0"
+                                    Foreground="{DynamicResource TextBrush}"/>
+                            <TextBox Text="{Binding CommitHash2, UpdateSourceTrigger=PropertyChanged}"
+                                     Style="{DynamicResource DefaultTextBoxStyle}"/>
+                        </StackPanel>
+
+                        <Button Content="Generate Diff"
+                                Command="{Binding GenerateDiffCommand}"
+                                Margin="0,10,0,0"
+                                Style="{DynamicResource DefaultButtonStyle}"/>
+
+                        <!-- Diff Output Options -->
+                        <CheckBox Content="Include diff in Preview"
+                                  Margin="0,10,0,0"
+                                  IsChecked="{Binding IncludeDiffInPreview}"
+                                  Foreground="{DynamicResource TextBrush}"/>
+                        <Button Content="Copy Diff to Clipboard"
+                                Command="{Binding CopyDiffToClipboardCommand}"
+                                Margin="0,5,0,0"
+                                Style="{DynamicResource DefaultButtonStyle}"/>
+                    </StackPanel>
+                </GroupBox>
+            </Grid>
 
             <GridSplitter Grid.Column="1"
-                          Grid.Row="0"/>
+                    Grid.Row="0"/>
 
-            <!-- Right Column: Output Preview -->
+            <!-- Preview Panel -->
             <Grid Grid.Column="2"
-                  Grid.Row="0"
-                  Margin="10,0,0,0">
+                    Grid.Row="0"
+                    Margin="10,0,0,0">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
@@ -269,10 +365,42 @@
                          IsEnabled="{Binding IsUiEnabled}"
                          BorderThickness="1"/>
             </Grid>
+
+            <GridSplitter Grid.Column="3"
+                          Grid.Row="0"
+                          Visibility="{Binding IsGitRepository, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+
+            <!-- Git Diff Output Panel -->
+            <Grid Grid.Column="4"
+                  Grid.Row="0"
+                  Margin="10,0,0,0"
+                  Visibility="{Binding IsGitRepository, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <TextBlock Grid.Row="0"
+                           Foreground="{DynamicResource TextBrush}"
+                           Text="Git Diff Output:"
+                           FontWeight="Bold"
+                           Margin="0,0,0,5"/>
+
+                <TextBox Grid.Row="1"
+                         x:Name="GitDiffTextBox"
+                         Text="{Binding GeneratedDiffText, Mode=OneWay}"
+                         IsReadOnly="True"
+                         AcceptsReturn="True"
+                         VerticalScrollBarVisibility="Auto"
+                         HorizontalScrollBarVisibility="Auto"
+                         FontFamily="Consolas, Courier New"
+                         TextWrapping="NoWrap"
+                         Style="{DynamicResource DefaultTextBoxStyle}"
+                         BorderThickness="1"/>
+            </Grid>
             <!-- Busy Overlay -->
             <Grid Grid.Row="0"
                   Grid.Column="0"
-                  Grid.ColumnSpan="3"
+                  Grid.ColumnSpan="5"
                   Background="{DynamicResource BusyOverlayBackgroundBrush}"
                   Visibility="{Binding IsBusy, Converter={StaticResource BooleanToVisibilityConverter}}">
                 <TextBlock Text="Processing..."
@@ -286,7 +414,7 @@
             <!-- Status Bar -->
             <StatusBar Grid.Row="1"
                        Grid.Column="0"
-                       Grid.ColumnSpan="3"
+                       Grid.ColumnSpan="5"
                        VerticalAlignment="Bottom"
                        Background="{DynamicResource StatusBarBackgroundBrush}"
                        Height="22">

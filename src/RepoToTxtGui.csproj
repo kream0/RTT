@@ -8,9 +8,12 @@
     <EnableDefaultPageItems>true</EnableDefaultPageItems>
     <EnableDefaultCompileItems>true</EnableDefaultCompileItems>
     <EnableDefaultXamlItems>true</EnableDefaultXamlItems>
+    <!-- This is the version number for the application -->
+    <Version>1.3.0</Version>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="SharpToken" Version="1.2.17" />
+    <PackageReference Include="LibGit2Sharp" Version="0.30.0" />
   </ItemGroup>
   <!-- We no longer need to exclude these files from None since they will be picked up as Page items -->
   <ItemGroup>
